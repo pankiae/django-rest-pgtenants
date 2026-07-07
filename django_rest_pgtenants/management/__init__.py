@@ -1,0 +1,1 @@
+# django-native-tenant management
