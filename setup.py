@@ -8,7 +8,7 @@ long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 setup(
     name='django-rest-pgtenants',
     version='0.1.0rc2',  # 🌟 Bump the version to rc2 so PyPI accepts the new upload
-    description='A lightweight, native Django multi-tenant schema isolation framework.',
+    description='A lightweight, API-first Django & Django REST Framework (DRF) multi-tenancy schema isolation package.',
     long_description=long_description,          # 🌟 Passes your README content
     long_description_content_type='text/markdown', # 🌟 Tells PyPI it's written in Markdown
     author='Pankaj Jarial',

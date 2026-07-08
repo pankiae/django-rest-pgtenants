@@ -1,6 +1,6 @@
 # django-rest-pgtenants
 
-A lightweight, native Django multi-tenancy package for PostgreSQL using schema isolation. Purpose-built for REST APIs (DRF) and async background workers (Celery) without requiring heavy database engine overrides, monkeypatching, or custom database backends.
+A lightweight, native multi-tenancy package for PostgreSQL schema isolation, purpose-built for **Django REST Framework (DRF) APIs** and asynchronous background workers (like Celery). Unlike other packages, it requires zero database engine overrides, monkeypatching, or custom database backends.
 
 ---
 
