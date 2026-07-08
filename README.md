@@ -177,3 +177,13 @@ This prevents a subsequent request from accidentally inheriting the database sch
 
 ## 📄 License
 This project is licensed under the MIT License.
+
+---
+
+## 🤝 Support & Contributions
+
+While `django-rest-pgtenants` comes embedded with all the core features needed to build secure, robust Django and Django REST Framework (DRF) multi-tenant systems, your feedback and use-cases are highly welcome!
+
+* **Got a Feature Request or found a Bug?** Feel free to open an issue or start a discussion on our [GitHub Repository](https://github.com/pankiae/django-rest-pgtenants).
+* **Want to contribute?** Pull requests are welcome! Feel free to fork the repository, make your changes, and submit a PR.
+* **Direct Support / Inquiry**: For custom support or feature additions, you can reach out directly at [pankajjarial.dev@gmail.com](mailto:pankajjarial.dev@gmail.com).
