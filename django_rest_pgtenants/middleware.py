@@ -1,27 +1,72 @@
 # django_rest_pgtenants/middleware.py
 
+from typing import Any, Optional, Type
 from django.conf import settings
 from django.apps import apps
 from django.core.cache import cache
+from django.db.models import Model
+from django.http import HttpRequest, HttpResponse
 from django.utils.deprecation import MiddlewareMixin
 from django_rest_pgtenants.schema_manager import set_search_path, reset_search_path
 
 class BaseTenantSchemaMiddleware(MiddlewareMixin):
-    def get_tenant_model(self):
-        config = getattr(settings, 'NATIVE_TENANT', {})
-        model_path = config.get('TENANT_MODEL')
+    """
+    Base middleware class for routing requests to tenant-specific database schemas.
+
+    Subclasses must implement `get_schema_for_request` to resolve the schema
+    associated with each incoming request.
+    """
+
+    def get_tenant_model(self) -> Type[Model]:
+        """
+        Retrieve the configured Django Model class representing tenants.
+
+        Returns:
+            Type[Model]: The tenant Django Model class.
+
+        Raises:
+            ValueError: If NATIVE_TENANT['TENANT_MODEL'] is not configured in settings.
+        """
+        config: dict = getattr(settings, 'NATIVE_TENANT', {})
+        model_path: Optional[str] = config.get('TENANT_MODEL')
         if not model_path:
             raise ValueError("NATIVE_TENANT['TENANT_MODEL'] must be configured in settings.")
         return apps.get_model(model_path)
 
-    def get_schema_column(self):
-        config = getattr(settings, 'NATIVE_TENANT', {})
+    def get_schema_column(self) -> str:
+        """
+        Retrieve the database column/attribute name that stores the schema name on the tenant model.
+
+        Returns:
+            str: The field/column name (defaults to 'schema_name').
+        """
+        config: dict = getattr(settings, 'NATIVE_TENANT', {})
         return config.get('SCHEMA_COLUMN', 'schema_name')
 
-    def get_schema_for_request(self, request) -> str:
+    def get_schema_for_request(self, request: HttpRequest) -> Optional[str]:
+        """
+        Resolve and return the schema name for the given HTTP request.
+
+        This method must be implemented by subclasses.
+
+        Args:
+            request (HttpRequest): The incoming Django HTTP request.
+
+        Returns:
+            Optional[str]: The name of the schema if resolved, or None.
+
+        Raises:
+            NotImplementedError: If the subclass does not implement this method.
+        """
         raise NotImplementedError("Subclasses must implement get_schema_for_request")
 
-    def process_request(self, request):
+    def process_request(self, request: HttpRequest) -> None:
+        """
+        Intercept the request to set the active tenant database schema (search_path).
+
+        Args:
+            request (HttpRequest): The incoming Django HTTP request.
+        """
         request.workspace_schema = 'public'
         try:
             schema_name = self.get_schema_for_request(request)
@@ -33,13 +78,39 @@ class BaseTenantSchemaMiddleware(MiddlewareMixin):
             pass
         reset_search_path()
 
-    def process_response(self, request, response):
+    def process_response(self, request: HttpRequest, response: HttpResponse) -> HttpResponse:
+        """
+        Reset the active schema search path to 'public' after the request finishes.
+
+        Args:
+            request (HttpRequest): The Django HTTP request.
+            response (HttpResponse): The Django HTTP response.
+
+        Returns:
+            HttpResponse: The unmodified Django HTTP response.
+        """
         reset_search_path()
         return response
 
 
 class JWTWorkspaceSchemaMiddleware(BaseTenantSchemaMiddleware):
-    def get_schema_for_request(self, request) -> str:
+    """
+    Middleware that identifies the tenant schema based on a claim in a SimpleJWT token.
+    """
+
+    def get_schema_for_request(self, request: HttpRequest) -> Optional[str]:
+        """
+        Resolve the tenant schema name from a JWT bearer token.
+
+        Uses Rest Framework SimpleJWT to extract the token, extract the tenant claim,
+        and look up the corresponding schema from the cache or tenant model.
+
+        Args:
+            request (HttpRequest): The incoming Django HTTP request.
+
+        Returns:
+            Optional[str]: The resolved tenant schema name, or None if not found/invalid.
+        """
         try:
             from rest_framework_simplejwt.authentication import JWTAuthentication
             jwt_authenticator = JWTAuthentication()
@@ -51,9 +122,9 @@ class JWTWorkspaceSchemaMiddleware(BaseTenantSchemaMiddleware):
                     user = jwt_authenticator.get_user(validated_token)
                     request.user = user
                     
-                    config = getattr(settings, 'NATIVE_TENANT', {})
-                    tenant_claim = config.get('TENANT_CLAIM', 'workspace_id')
-                    tenant_field = config.get('TENANT_FIELD', 'id')
+                    config: dict = getattr(settings, 'NATIVE_TENANT', {})
+                    tenant_claim: str = config.get('TENANT_CLAIM', 'workspace_id')
+                    tenant_field: str = config.get('TENANT_FIELD', 'id')
                     
                     tenant_value = validated_token.get(tenant_claim)
                     if tenant_value:
@@ -73,7 +144,20 @@ class JWTWorkspaceSchemaMiddleware(BaseTenantSchemaMiddleware):
 
 
 class SubdomainSchemaMiddleware(BaseTenantSchemaMiddleware):
-    def get_schema_for_request(self, request) -> str:
+    """
+    Middleware that identifies the tenant schema based on the request's subdomain.
+    """
+
+    def get_schema_for_request(self, request: HttpRequest) -> Optional[str]:
+        """
+        Resolve the tenant schema name using the host's subdomain.
+
+        Args:
+            request (HttpRequest): The incoming Django HTTP request.
+
+        Returns:
+            Optional[str]: The resolved tenant schema name, or None if not found/invalid.
+        """
         try:
             host = request.get_host().split(':')[0]
             parts = host.split('.')
@@ -95,11 +179,24 @@ class SubdomainSchemaMiddleware(BaseTenantSchemaMiddleware):
 
 
 class HeaderTenantSchemaMiddleware(BaseTenantSchemaMiddleware):
-    def get_schema_for_request(self, request) -> str:
+    """
+    Middleware that identifies the tenant schema based on an HTTP header.
+    """
+
+    def get_schema_for_request(self, request: HttpRequest) -> Optional[str]:
+        """
+        Resolve the tenant schema name from a specific HTTP header.
+
+        Args:
+            request (HttpRequest): The incoming Django HTTP request.
+
+        Returns:
+            Optional[str]: The resolved tenant schema name, or None if not found/invalid.
+        """
         try:
-            config = getattr(settings, 'NATIVE_TENANT', {})
-            header_name = config.get('TENANT_HEADER', 'X-Tenant-ID')
-            tenant_field = config.get('TENANT_FIELD', 'id')
+            config: dict = getattr(settings, 'NATIVE_TENANT', {})
+            header_name: str = config.get('TENANT_HEADER', 'X-Tenant-ID')
+            tenant_field: str = config.get('TENANT_FIELD', 'id')
             
             tenant_value = request.headers.get(header_name)
             if tenant_value:
@@ -116,4 +213,5 @@ class HeaderTenantSchemaMiddleware(BaseTenantSchemaMiddleware):
         except Exception:
             pass
         return None
+
 
